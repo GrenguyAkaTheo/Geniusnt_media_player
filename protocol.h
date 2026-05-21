@@ -3,23 +3,23 @@
 
 #include <cstdint>
 
-// Fixed path to our local Unix socket node file
 const char* const SOCKET_PATH = "/tmp/media_player.sock";
 
 enum class CommandType : int32_t {
-    ADD_TO_QUEUE = 0,
-    PLAY         = 1,
-    PAUSE        = 2,
-    SKIP         = 3,
-    SET_VOLUME   = 4,
-    GET_STATUS   = 5
+    ADD_TO_QUEUE     = 0, // High priority user queue
+    ADD_TO_PLAYLIST  = 1, // Fallback background playlist queue
+    PLAY             = 2,
+    PAUSE            = 3,
+    SKIP             = 4,
+    SET_VOLUME       = 5,
+    GET_STATUS       = 6,
+    CLEAR_PLAYLIST   = 7
 };
 
-// CRITICAL: Packed structure ensures no hidden alignment padding bytes are added by the compiler
 struct __attribute__((packed)) PlayerCommand {
     CommandType type;
-    int32_t int_value;         // e.g., Volume level or status codes
-    char path_value[512];      // Track paths
+    int32_t int_value;
+    char path_value[512];
 };
 
 #endif // PROTOCOL_H
