@@ -1,4 +1,4 @@
-# Geniusnt_media_player
+# Geniusnt media player
 
 This works like the Audacious audio player in headless mode. Run ./Geniusnt in one shell in the build dir to start the service, then run ./Geniusnt-ctl in another shell (also in the build dir) to send commands to acctually use the main player.
 
