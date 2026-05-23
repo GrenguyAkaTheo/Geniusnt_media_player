@@ -10,7 +10,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED libavformat libavcodec libavutil libswresample)
 
 # --- DAEMON TARGET ---
-add_executable(Geniusnt daemon_main.cpp) 
+add_executable(Geniusnt Main.cpp) 
 target_link_libraries(Geniusnt PRIVATE ${FFMPEG_LIBRARIES} m pthread dl)
 target_include_directories(Geniusnt PRIVATE ${FFMPEG_INCLUDE_DIRS})
 
