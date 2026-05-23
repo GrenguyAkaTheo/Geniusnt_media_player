@@ -8,6 +8,6 @@ To start the nix shell just run `sudo nix-shell` in the directory with all the c
 
 simply running ./Geniusnt-ctl will give a list of the avalable flags for the media player.
 
-To get the GUI run ./Geniusnt-gui.
+This is a CLI media player designed to be put on something like a USB drive along side any audio files you have, meaning if you wish to play your music on a computer without a media player, you can still listen to music completely offline.
 
 If your user account ID isn't 1000, you will have to change this in the shell.nix file to match your ID.
