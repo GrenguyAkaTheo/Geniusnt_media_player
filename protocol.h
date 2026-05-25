@@ -17,7 +17,8 @@ enum class CommandType : int32_t {
     SHUFFLE_PLAYLIST = 8,
     PREVIOUS_TRACK   = 9,
     TOGGLE_SHUFFLE   = 10,
-    TOGGLE_LOOP      = 11
+    TOGGLE_LOOP      = 11,
+    QUIT             = 12
 };
 
 // Packed response payload sent from Daemon back to player-ctl

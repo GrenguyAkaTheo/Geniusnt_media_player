@@ -7,6 +7,10 @@
 #include <sys/un.h>
 #include <algorithm>
 #include <random>
+#include <atomic>
+#include <fstream>
+
+std::atomic<bool> g_running{true};
 
 extern "C" {
     #include <libavformat/avformat.h>
@@ -208,6 +212,12 @@ void socket_listener_thread(AudioPlayerState* state) {
                         send(client_fd, &res, sizeof(PlayerStatusResponse), 0);
                         break;
                     }
+                    case CommandType::QUIT: {
+                        std::cout << "\n[Daemon] Received QUIT command. Initiating clean shutdown...\n" << std::flush;
+                        g_running = false;               // Signals the outer main() track loop
+                        state->quit_requested = true;    // Signals the inner decoding/sleep loops
+                        break;
+                    }
             }
             pthread_mutex_unlock(&state->mutex);
         }
@@ -221,6 +231,51 @@ void socket_listener_thread(AudioPlayerState* state) {
 int main(int argc, char* argv[]) {
     AudioPlayerState player_state;
     pthread_mutex_init(&player_state.mutex, nullptr);
+
+    // --- LOAD SAVED STATE ---
+    std::cout << "[Daemon] Attempting to load settings...\n";
+    std::ifstream settings_in("settings");
+
+    if (settings_in.is_open()) {
+        std::string line;
+
+        while (std::getline(settings_in, line)) {
+            // Find the delimiter
+            size_t delim_pos = line.find('=');
+            if (delim_pos == std::string::npos) continue; // Skip malformed lines
+
+            // Split the string into Key and Value
+            std::string key = line.substr(0, delim_pos);
+            std::string val = line.substr(delim_pos + 1);
+
+            // Apply the configuration
+            if (key == "VOLUME") {
+                player_state.current_volume = std::stoi(val);
+            } else if (key == "SHUFFLE") {
+                player_state.shuffle_enabled = (val == "1");
+            } else if (key == "LOOP") {
+                player_state.loop_enabled = (val == "1");
+            } else if (key == "CURRENT_TRACK" || key == "USER_QUEUE_ITEM") {
+                player_state.user_queue.push_back(val);
+            } else if (key == "PLAYLIST_ITEM") {
+                player_state.playlist_master.push_back(val);
+                player_state.auto_playlist.push_back(val);
+            }
+        }
+        settings_in.close();
+
+        // If shuffle was enabled, randomize the restored active pool instantly
+        if (player_state.shuffle_enabled && !player_state.auto_playlist.empty()) {
+            std::random_device rd;
+            std::mt19937 g(rd());
+            std::shuffle(player_state.auto_playlist.begin(), player_state.auto_playlist.end(), g);
+        }
+
+        std::cout << "[Daemon] Settings loaded successfully.\n";
+    } else {
+        std::cout << "[Daemon] No settings file found, starting fresh.\n";
+    }
+    // --- END LOAD SAVED STATE ---
 
     // Initial CLI launch parameters route cleanly into our high priority queue
     for (int i = 1; i < argc; ++i) {
@@ -273,6 +328,11 @@ int main(int argc, char* argv[]) {
                 else {
                     // Keep history alive even when idling
                     player_state.current_track_path = "";
+                    // Check for a quit command
+                    if (player_state.quit_requested) {
+                        pthread_mutex_unlock(&player_state.mutex);
+                        break;
+                    }
                     pthread_mutex_unlock(&player_state.mutex);
                     usleep(100000);
                     continue;
@@ -487,9 +547,57 @@ int main(int argc, char* argv[]) {
 
             std::cout << "[Daemon] Track wrapped up cleanly. Loading next in queue...\n" << std::flush;
 
+            if (!g_running) break;
         }
 
-        pthread_mutex_destroy(&player_state.mutex);
-        return 0;
+        if (!g_running) break;
+
     }
+
+    // --- NATURAL RESOURCE UNWINDING ---
+
+    // 1. Lock the state one last time to safely extract the data
+    pthread_mutex_lock(&player_state.mutex);
+
+    std::cout << "[Daemon] Saving state to 'settings'...\n";
+    std::ofstream settings_out("settings", std::ios::trunc);
+
+    if (settings_out.is_open()) {
+        settings_out << "VOLUME=" << player_state.current_volume << "\n";
+        settings_out << "SHUFFLE=" << (player_state.shuffle_enabled ? "1" : "0") << "\n";
+        settings_out << "LOOP=" << (player_state.loop_enabled ? "1" : "0") << "\n";
+
+        // Save the currently active track
+        if (!player_state.current_track_path.empty()) {
+            settings_out << "CURRENT_TRACK=" << player_state.current_track_path << "\n";
+        }
+
+        // Dump the high-priority user queue
+        for (const std::string& track : player_state.user_queue) {
+            settings_out << "USER_QUEUE_ITEM=" << track << "\n";
+        }
+
+        // Dump the entire master playlist
+        for (const std::string& track : player_state.playlist_master) {
+            settings_out << "PLAYLIST_ITEM=" << track << "\n";
+        }
+
+        settings_out.close();
+        std::cout << "[Daemon] Settings saved successfully.\n";
+    } else {
+        std::cerr << "[Daemon] Error: Could not open settings file for writing.\n";
+    }
+
+    pthread_mutex_unlock(&player_state.mutex);
+
+    // 2. Safely destroy the mutex and free FFmpeg memory
+    pthread_mutex_destroy(&player_state.mutex);
+    if (player_state.fifo) {
+        av_audio_fifo_free(player_state.fifo);
+    }
+
+    // 3. Clean up filesystem socket footprint
+    unlink(SOCKET_PATH);
+    std::cout << "[Daemon] Shutdown complete.\n";
+    return 0;
 }

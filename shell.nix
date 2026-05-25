@@ -11,6 +11,7 @@ pkgs.mkShell {
     ffmpeg
     alsa-lib
     libpulseaudio
+    glibc.static
   ];
 
   shellHook = ''

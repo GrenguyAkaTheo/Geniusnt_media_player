@@ -185,6 +185,7 @@ int main(int argc, char* argv[]) {
         if (flag == "--play") cmd.type = CommandType::PLAY;
         else if (flag == "--pause") cmd.type = CommandType::PAUSE;
         else if (flag == "--skip") cmd.type = CommandType::SKIP;
+        else if (flag == "--quit") cmd.type = CommandType::QUIT;
         else if (flag == "--volume" && argc >= 3) {
             cmd.type = CommandType::SET_VOLUME;
             cmd.int_value = std::stoi(argv[2]);
